@@ -299,7 +299,38 @@ void LAnalizer::setTunnels( QString tunnels ) {
     }
 }
 
+/*
+ *
+ * VDC binary encoder ., 
+ *    vl : int in ...
+ *    sz : int in ..
+ *    str : out  ..
+ *    
+ */
+QString &LAnalizer::VCDbinEncoder() {
+
+} 
+
+
+
+QString &LAnalizer::wireLength() {
+
+} 
+
+
 void LAnalizer::dumpData( QString fn ) {
+    /*
+    * https://en.wikipedia.org/wiki/Value_change_dump
+    * The identifier is composed of one or more printable ASCII characters
+    * from ! to ~ (decimal 33 to 126)
+    * 
+    * if bus signals exist , they can be grouped (nested) in
+    * and vectored to the VCD , with bit representation
+    * 
+    *  these are conventionally kept short (i.e. one or two characters). 
+    *
+    * 
+    */
     QChar identifiers[8] = { '*', '"', '#', '$', '%', '&', '(', ')' };
 
     QFile file( fn );
@@ -334,8 +365,34 @@ void LAnalizer::dumpData( QString fn ) {
         QString name = m_channel[ch]->getChName(); // Get channel name
         if ( name.isEmpty() )
             name = "D" + QString::number( ch ); // If name is empty set name = Dn
+        /*
+         * if is_bus ., wirelength <= buslenght , 
+         * and coding VCD will be:   'b[D{*N}] S' , 
+         * where: 
+         *    N = Number of bits., 
+         *    D = Bit value 
+         *    S = Channel symbol
+         * 
+         *   **** VERIFY ****
+         *  Apparently simulide does get bus bits as absolute, 
+         *  so a remapped bus that has 8 bits starting from 8 [8..15] , 
+         *  is registered on the analyzer as 16 bit values
+         *  Since this analyzer enables supposedly any bitlength bus, 
+         *  IMHO if the channel should record the bits from 0 to buslength 
+         *  as presented to the channel to match whatever 
+         *  label was given independently of the wiring.,
+         *  
+         *  Conside the following examples: High order bit of a bus, [8..15] ,
+         *   Value  >>>  should show  <<<<    shows...
+         *   0x01        b00000001            512
+         *   0x02        b00000010            1024
+         *   0x04        b00000100            2048
+         * 
+         *   wireLength <--   m_channel  bus_width .<<<
+         *
+         */
 
-        varDef += "$var wire 1 " + QString( identifiers[ch] ) + " " + name + " $end\n";
+        varDef += "$var wire " + wireLength() +  " " + QString( identifiers[ch] ) + " " + name + " $end\n";
 
         bool init = false;
         double initVal = 0;
@@ -364,6 +421,11 @@ void LAnalizer::dumpData( QString fn ) {
                 val = pVal;
             } // Add final value (screen edge)
             if ( !init ) {
+                /*  ***** WIP *****  */
+                /*  encode val to wirelength if > 1 to bn... VCD vector format .,  
+		 *  where n is the bit image of the value, with wirelength size
+		 */
+
                 dumpVars += QString::number( initVal ) + identifiers[ch] + "\n"; // Add initial value
                 init = true;
             }
@@ -372,7 +434,8 @@ void LAnalizer::dumpData( QString fn ) {
 
             //if( gcd > 0 ) gcd = getGcd( gcd, time ); // Get Greatest Common Denominator
             //else          gcd = time;
-
+            /*  ***** WIP *****  */
+            /*  encode val to wirelength if > 1 to bn... VCD vector format .,  */
             samples.insert( time, { val, ch } );
             if ( time == lastTime )
                 break; // All samples before endTime already registered
@@ -391,7 +454,9 @@ void LAnalizer::dumpData( QString fn ) {
         timeStamp = time / gcd;
         out << Qt::endl << "#" << timeStamp;
         for ( sample_t sample : samples.values( time ) )
-            out << " " << sample.value << identifiers[sample.channel];
+            /*  ***** WIP *****  */
+            /*  encode val to wirelength if > 1 to bn... VCD vector format .,  */
+            out << " " << VCDbinEncoder( sample.value , sample.channel ) << identifiers[sample.channel];
     }
     out << Qt::endl << "#" << timeStamp + 1; // last time stamp
     file.close();
