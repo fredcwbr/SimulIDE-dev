@@ -307,15 +307,23 @@ void LAnalizer::setTunnels( QString tunnels ) {
  *    str : out  ..
  *    
  */
-QString &LAnalizer::VCDbinEncoder() {
-
+QString &LAnalizer::VCDbinEncoder( int64_t value  , int pin ) {
+    // VCDencoded bus vector
+    QString cdBus("b");
+  
+    // Pin s(x) .. //
+    // int  wirelength = ( isbus ? pin.length : 1 )
+    for( int i = wireLength( pin ) ; i > 0 ;) {
+      cdBus << ( value & (1<<(--i)) ? '1' : '0' );
+    }
+    cdBus << ' '; // mandatory space delimiter on VCD wire vector 
+    return cdBus;
+      
 } 
 
-
-
-QString &LAnalizer::wireLength() {
-
-} 
+/*  moved inside  .h << 
+int &LAnalizer::wireLength( pin ) 
+*/ 
 
 
 void LAnalizer::dumpData( QString fn ) {
@@ -392,7 +400,7 @@ void LAnalizer::dumpData( QString fn ) {
          *
          */
 
-        varDef += "$var wire " + wireLength() +  " " + QString( identifiers[ch] ) + " " + name + " $end\n";
+        varDef += "$var wire " + QString(wireLength()) +  " " + QString( identifiers[ch] ) + " " + name + " $end\n";
 
         bool init = false;
         double initVal = 0;
