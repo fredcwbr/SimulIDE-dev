@@ -307,23 +307,25 @@ void LAnalizer::setTunnels( QString tunnels ) {
  *    str : out  ..
  *    
  */
-QString &LAnalizer::VCDbinEncoder( int64_t value  , int pin ) {
+QString LAnalizer::VCDbinEncoder( int64_t value  , int ch ) {
     // VCDencoded bus vector
-    QString cdBus("b");
-  
-    // Pin s(x) .. //
-    // int  wirelength = ( isbus ? pin.length : 1 )
-    for( int i = wireLength( pin ) ; i > 0 ;) {
-      cdBus << ( value & (1<<(--i)) ? '1' : '0' );
+    QString cdBus;
+    
+    if( m_channel[ch]->f_busLength() > 1 ) { 
+        cdBus.append("b");
+        // Pin s(x) .. //
+        // int  wirelength = ( isbus ? pin.length : 1 )
+
+        for( int i = m_channel[ch]->f_busLength() ; i > 0 ;) {
+          cdBus.append( ( value & (1<<(--i)) ? "1" : "0" ) );
+        }
+        cdBus.append( " " ); // mandatory space delimiter on VCD wire vector 
+    } else {
+       cdBus.append( ( value ? "1" : "0" ) );
     }
-    cdBus << ' '; // mandatory space delimiter on VCD wire vector 
     return cdBus;
       
 } 
-
-/*  moved inside  .h << 
-int &LAnalizer::wireLength( pin ) 
-*/ 
 
 
 void LAnalizer::dumpData( QString fn ) {
@@ -400,7 +402,10 @@ void LAnalizer::dumpData( QString fn ) {
          *
          */
 
-        varDef += "$var wire " + QString(wireLength()) +  " " + QString( identifiers[ch] ) + " " + name + " $end\n";
+        varDef += "$var wire " + 
+            QString::number( m_channel[ch]->f_busLength() ) +
+            " " + QString( identifiers[ch] ) + 
+            " " + name + " $end\n";
 
         bool init = false;
         double initVal = 0;
@@ -431,10 +436,9 @@ void LAnalizer::dumpData( QString fn ) {
             if ( !init ) {
                 /*  ***** WIP *****  */
                 /*  encode val to wirelength if > 1 to bn... VCD vector format .,  
-		 *  where n is the bit image of the value, with wirelength size
-		 */
-
-                dumpVars += QString::number( initVal ) + identifiers[ch] + "\n"; // Add initial value
+                 *  where n is the bit image of the value, with wirelength size
+                 */
+                dumpVars += VCDbinEncoder( initVal , ch  ) + identifiers[ch] + "\n"; // Add initial value
                 init = true;
             }
             pVal = val;

@@ -44,9 +44,7 @@ public:
 
     void setIsBus( int ch, bool b ) { m_channel[ch]->setIsBus( b ); }
   
-    QString &LAnalizer::VCDbinEncoder( int64_t value  , int pin ) ;
-    int  wireLength( int pin ) {  return  isbus ? m_channel[pin]->length() : 1 ;  } 
-
+    QString VCDbinEncoder( int64_t value  , int ch ) ;
 
     void setTrigger( int ch ) override;
 

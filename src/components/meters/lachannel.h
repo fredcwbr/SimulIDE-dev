@@ -26,12 +26,13 @@ public:
 
     void setIsBus( bool b ) override;
     void registerEnode( eNode* enode, int n = -1 );
-
+    int  f_busLength()  override;
+    
 private:
     void addReading( double v );
 
     double m_busValue;
-
+    int    m_busLength;
     QMap<int, eNode*> m_busNodes;
 
     LAnalizer* m_analizer;

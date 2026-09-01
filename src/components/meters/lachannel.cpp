@@ -3,6 +3,8 @@
  *                                                                         *
  ***( see copyright.txt file at root folder )*******************************/
 
+#include <QtDebug>
+
 #include "lachannel.h"
 #include "pin.h"
 #include "plotdisplay.h"
@@ -39,13 +41,22 @@ void LaChannel::stamp() // Called at Simulation Start
         bool connected = m_pin->connector();
         m_plotBase->display()->connectChannel( m_channel, connected );
 
-        for ( eNode* node : m_busNodes )
+        for ( eNode* node : m_busNodes ) {
             node->voltChangedCallback( this );
-    }
+        }
+        m_busLength = m_busNodes.count();
+        qDebug() << "LaChannel :: isBus() :: BusLength " << m_busLength;
+    } else 
+        m_busLength = 1;
 }
 
 void LaChannel::setPin( Pin* p ) {
     m_ePin[0] = m_pin = p;
+}
+
+int LaChannel::f_busLength() {
+    qDebug() << "f_busLength " << m_busLength << " ;; busNodes :: " <<  m_busNodes.count();
+    return m_busLength;
 }
 
 void LaChannel::setIsBus( bool b ) {
@@ -73,15 +84,22 @@ void LaChannel::voltChanged() {
 
     if ( m_pin->isBus() ) {
         double busValue = 0;
+        double volt;
+        bool high;
+        
         for ( int n : m_busNodes.keys() ) {
             eNode* nod = m_busNodes.value( n );
-            double volt = nod->getVolt();
-            bool high = volt > m_analizer->thresholdR();
+            volt = nod->getVolt();
+            high = volt > m_analizer->thresholdR();
             if ( high )
                 busValue += pow( 2, n );
         }
         if ( m_busValue != busValue ) {
             m_busValue = busValue;
+             qDebug() << "LaChannel::voltchanged : N[" << m_busNodes.count() <<
+                        "] High"<< high <<  
+                        "; volt:  " << volt <<
+                        "; busvalue : "<< busValue ;
             addReading( busValue );
         }
     } else {

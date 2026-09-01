@@ -18,6 +18,9 @@ TRANSLATIONS = $$files( $$PWD/resources/translations/*.ts )
 FORMS       += $$files( $$PWD/src/*.ui, true )
 RESOURCES    = $$PWD/src/application.qrc
 
+#SOURCES     -= $$pwd/angel/JIT/as_jit.cpp
+
+
 INCLUDEPATH += $$PWD/src \
     $$PWD/src/components \
     $$PWD/src/components/active \
@@ -80,6 +83,8 @@ INCLUDEPATH += $$PWD/src \
     $$PWD/src/angel/JIT \
     $$PWD/src/angel/src
 
+
+
 QMAKE_CXXFLAGS += -Wno-unused-parameter
 #QMAKE_CXXFLAGS += -Wno-deprecated-declarations
 QMAKE_CXXFLAGS += -Wno-implicit-fallthrough
@@ -87,6 +92,7 @@ QMAKE_CXXFLAGS += -fno-strict-aliasing      #AngelScript
 QMAKE_CXXFLAGS += -Wno-cast-function-type   #AngelScript
 QMAKE_CXXFLAGS += -Wno-deprecated-copy      #AngelScript
 QMAKE_CXXFLAGS += -Wno-invalid-offsetof     #AngelScript
+# QMAKE_CXXFLAGS += -fpermissive              #AngelScript
 QMAKE_CXXFLAGS += -Ofast
 QMAKE_CXXFLAGS_DEBUG += -D_GLIBCXX_ASSERTIONS
 QMAKE_CXXFLAGS_DEBUG -= -O
@@ -144,6 +150,8 @@ CONFIG *= c++11
 DEFINES += REVNO=\\\"$$REV_NO\\\"
 DEFINES += APP_VERSION=\\\"$$VERSION-$$RELEASE\\\"
 DEFINES += BUILDDATE=\\\"$$BUILD_DATE\\\"
+#DEFINES += AS_NO_COMPILER
+#DEFINES += AS_NO_THREADS
 
 TARGET_NAME   = SimulIDE_$$VERSION-$$RELEASE
 TARGET_PREFIX = $$BUILD_DIR/executables/$$TARGET_NAME

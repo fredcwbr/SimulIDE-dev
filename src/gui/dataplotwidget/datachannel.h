@@ -33,6 +33,8 @@ public:
     virtual void setIsBus( bool b ) { ; }
 
     QString getChName() { return m_chTunnel; }
+    
+    virtual int  f_busLength() { return 1; } 
 
     bool doTest( bool test );
 
