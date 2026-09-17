@@ -16,7 +16,9 @@
 #include "datautils.h"
 
 AvrCore::AvrCore( eMcu* mcu )
-       : Mcu8bits( mcu )
+    : Mcu8bits( mcu )
+    , m_ramProxy( &m_defaultProxy )
+    , m_defaultProxy( nullptr, 0 )
 {
     if( mcu->regExist("EIND") ) EIND = m_mcu->getReg( "EIND" );
     else EIND = nullptr;
@@ -40,8 +42,27 @@ AvrCore::AvrCore( eMcu* mcu )
     m_PGERS = getRegBits("PGERS", mcu );
     m_PGWRT = getRegBits("PGWRT", mcu );
 
+    // RMEMPRXY hook: Bind default passthrough proxy to existing data space
+    if ( m_dataMem ) {
+        m_defaultProxy.setBuffer( m_dataMem, mcu->ramSize() );
+    }
 }
-AvrCore::~AvrCore() {}
+
+AvrCore::~AvrCore()
+{
+    if ( m_ramProxy != &m_defaultProxy ) {
+        delete m_ramProxy;
+    }
+}
+
+void AvrCore::setRamProxy( RamMemoryProxy* proxy )
+{
+    if ( proxy ) {
+        m_ramProxy = proxy;
+    } else {
+        m_ramProxy = &m_defaultProxy;
+    }
+}
 
 void AvrCore::reset()
 {
