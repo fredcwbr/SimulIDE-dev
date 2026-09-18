@@ -29,6 +29,11 @@ public:
     inline uint8_t readDataMem( uint16_t addr );
     inline void    writeDataMem( uint16_t addr, uint8_t val );
 
+    // Direct subscript access via proxy: mem[addr] = val; / val = mem[addr];
+    inline RamProxyRef mem(uint16_t addr) {
+        return (*m_ramProxy)[addr];
+    }
+
 private:
     void writeFlash();
 
@@ -61,6 +66,11 @@ private:
     void flags_zcvs( uint8_t res, uint8_t vr );
     void flags_zns16( uint16_t res );
     int is_instr_32b( uint32_t pc );
+   
+    // Local lambda capturing 'this' to route all subscript lookups through our proxy
+    inline RamProxyRef RAM(uint16_t addr) {
+        return (*m_ramProxy)[addr];
+    } 
 };
 
 inline uint8_t AvrCore::readDataMem( uint16_t addr )
