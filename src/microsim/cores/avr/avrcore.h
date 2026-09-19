@@ -13,7 +13,11 @@
 
 #include "mcu8bits.h"
 #include "mcutypes.h"
+#include "e_mcu.h"
+#include "mcu.h"
+#include "mcuport.h"
 #include "rammemoryproxy.h"
+#include <QDebug>
 
 class AvrCore : public Mcu8bits {
 public:
@@ -29,9 +33,65 @@ public:
     inline uint8_t readDataMem( uint16_t addr );
     inline void    writeDataMem( uint16_t addr, uint8_t val );
 
+    // Intercept data space macros/functions used by LDS, STS, LD, ST, etc.
+    // Intercept data space accesses: delegate internal RAM/Registers/IO to Mcu8bits, route XMEM (>= 0x2200) to proxy
+    // Intercept data space accesses: delegate internal RAM/Registers/IO to Mcu8bits, route XMEM (>= 0x2200) to proxy
+    inline uint8_t GET_RAM( uint16_t addr ) {
+        if ( addr >= 0x2200 ) {
+            return m_ramProxy->read( addr );
+        }
+        return Mcu8bits::GET_RAM( addr );
+    }
+
+    inline void SET_RAM( uint16_t addr, uint8_t val ) {
+        // Catch XMCRA (0x74) and XMCRB (0x75) configuration writes
+        if ( addr == 0x74 || addr == 0x75 || addr == 0x0074 || addr == 0x0075 ) {
+            if ( m_ramProxy ) {
+                m_ramProxy->write( addr, val );
+            }
+        }
+
+        if ( addr >= 0x2200 ) {
+            m_ramProxy->write( addr, val );
+            return;
+        }
+
+        Mcu8bits::SET_RAM( addr, val );
+    }
+
     // Direct subscript access via proxy: mem[addr] = val; / val = mem[addr];
     inline RamProxyRef mem(uint16_t addr) {
         return (*m_ramProxy)[addr];
+    }
+
+    // Safely write to I/O registers so SimulIDE port watchers and logic analyzers update
+    inline void writePortReg(uint16_t regAddr, uint8_t val) {
+        qDebug() << "[AVRCORE-PORT] writePortReg invoked for register addr:" << Qt::hex << regAddr << "with value:" << val;
+        m_mcu->writeReg(regAddr, val);
+        
+        // Forcefully update MCU ports when control registers change
+        if (m_mcu) {
+            if (regAddr == 0x34) { // PORTG
+                McuPort* portG = m_mcu->getMcuPort("PORTG");
+		qDebug() << "[PORTG-DEBUG] portG pointer:" << portG;
+                if (portG){
+		   portG->outChanged(val);
+        	   qDebug() << "[AVRCORE-PORT-PORTG-CHANGED] outChanged(portG) addr:" << Qt::hex << regAddr << "with value:" << val;
+		}
+            } else if (regAddr == 0x22) { // PORTA
+                McuPort* portA = m_mcu->getMcuPort("PORTA");
+                if (portA) {
+		   portA->outChanged(val);
+        	   qDebug() << "[AVRCORE-PORT-PORTA-CHANGED] outChanged(portA) addr:" << Qt::hex << regAddr << "with value:" << val;
+		}
+            } else if (regAddr == 0x28) { // PORTC
+                McuPort* portC = m_mcu->getMcuPort("PORTC");
+                if (portC) {
+		   portC->outChanged(val);
+        	   qDebug() << "[AVRCORE-PORT-PORTC-CHANGED] outChanged(portC) addr:" << Qt::hex << regAddr << "with value:" << val;
+		}
+            }
+        }
     }
 
 private:

@@ -14,12 +14,14 @@
 #include "avrsleep.h"
 #include "simulator.h"
 #include "datautils.h"
+#include "mcuxmemproxy.h"
 
 AvrCore::AvrCore( eMcu* mcu )
     : Mcu8bits( mcu )
     , m_ramProxy( &m_defaultProxy )
     , m_defaultProxy( nullptr, 0 )
 {
+    // --- 1. Existing Core Configuration (Preserved) ---
     if( mcu->regExist("EIND") ) EIND = m_mcu->getReg( "EIND" );
     else EIND = nullptr;
 
@@ -39,19 +41,38 @@ AvrCore::AvrCore( eMcu* mcu )
 
     // SPMCSR
     m_SELFPRGEN = getRegBits("SELFPRGEN", mcu );
-    m_PGERS = getRegBits("PGERS", mcu );
-    m_PGWRT = getRegBits("PGWRT", mcu );
+    m_PGERS     = getRegBits("PGERS", mcu );
+    m_PGWRT     = getRegBits("PGWRT", mcu );
 
-    // RMEMPRXY hook: Bind default passthrough proxy to existing data space
+    // --- 2. Default Internal SRAM Binding ---
     if ( m_dataMem ) {
         m_defaultProxy.setBuffer( m_dataMem, mcu->ramSize() );
+    }
+
+    // --- 3. XMEM Proxy Detection & Attachment ---
+    if ( mcu->regExist("XMCRA") )
+    {
+        uint8_t* xmcraReg = m_mcu->getReg( "XMCRA" );
+        uint8_t* xmcrbReg = mcu->regExist("XMCRB") ? m_mcu->getReg( "XMCRB" ) : nullptr;
+
+	McuXmemProxy* xmemProxy = new McuXmemProxy(
+	    this,
+            m_mcu,
+            m_dataMem,
+            mcu->ramSize(),
+            xmcraReg,
+            xmcrbReg
+        );
+
+        setRamProxy( xmemProxy );
     }
 }
 
 AvrCore::~AvrCore()
 {
-    if ( m_ramProxy != &m_defaultProxy ) {
+    if ( m_ramProxy && m_ramProxy != &m_defaultProxy ) {
         delete m_ramProxy;
+        m_ramProxy = &m_defaultProxy;
     }
 }
 
