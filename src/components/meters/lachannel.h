@@ -28,13 +28,13 @@ class LaChannel : public DataChannel
         void setIsBus( bool b ) override;
         void registerEnode( eNode* enode, int n=-1 );
 
-        int bitLength() { return m_bitLength; }
+        int busLength() { return m_busLength; } ;
 
     private:
         void addReading( double v );
 
         double m_busValue;
-        int m_bitLength;
+        int m_busLength;
 
         QMap<int, eNode*> m_busNodes;
 

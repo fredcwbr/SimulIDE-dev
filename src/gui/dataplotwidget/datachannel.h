@@ -46,6 +46,8 @@ class DataChannel : public eElement, public Updatable
 
         QString testData();
         void setTestData( QString td );
+        
+         virtual int busLength() { return 0; };
 
     protected:
         QVector<double> m_buffer;

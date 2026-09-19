@@ -319,90 +319,190 @@ void LAnalizer::setTunnels( QString tunnels )
         m_dataWidget->setTunnel( i, list.at(i) );
 }   }
 
-void LAnalizer::dumpData( QString fn )
-{
-    QChar identifiers[8] = {'*', '"', '#', '$', '%', '&', '(', ')'};
 
-    QFile file( fn );
-    if( !file.open( QIODevice::WriteOnly | QIODevice::Text ) ) return;
+
+
+/*
+    Task 1: Identifier Generation (f_identifier)
+    To handle an arbitrary number of channels while mapping them cleanly
+    into valid printable ASCII characters within the 48 ('0') to 122 ('z')
+    range (avoiding invalid symbols or control characters), 
+    we can implement f_identifier to support single or multi-character
+    expansion using modulo arithmetic.
+*/
+QString LAnalizer::f_identifier(int ndx) {
+    // Printable ASCII range is 48 ('0') through 122 ('z') -> total 75 characters
+    const int rangeStart = 48;
+    const int rangeEnd = 122;
+    const int numChars = (rangeEnd - rangeStart) + 1; // 75
+
+    // Multi-character expansion for channel counts exceeding 75
+    int high = ndx / numChars;
+    int low = ndx % numChars;
+    QString w;
+   
+    // qDebug() << " High :: " << high; 
+    for (int i = 0; i < high ; ++i) {
+        // qDebug() << "laco com " << i;    
+        w.append(QChar(rangeStart + i));
+        qDebug() << w;
+    }
+    
+    w.append(QChar(rangeStart + low));
+    return w;
+}
+
+QString LAnalizer::encodeVCD(int64_t val, int ch ) {
+    QString w = QString("");
+  
+    // ****  TODO **** 
+    // Verify generation option : gtkwave / pulseview
+    //
+    //  gtkwave wire vector, allows bitstring representation and scoping
+    //  pulsview -- each wire is an indepent signal ., no scoping
+    
+    // Verifica se ‚ um barramento com largura superior a 1 ou 0
+    if (m_channel[ch]->isBus()) {
+        w.append('b');
+        for (int i = m_channel[ch]->busLength(); i > 0 ; --i) {
+            w.append(val & (1 << (i-1)) ? '1' : '0');
+        }
+        w.append(" "); // Obrigat¢rio em vetores bin rios VCD antes do identificador
+    } else {
+        w.append(val ? '1' : '0'); // Sinal de bit £nico
+    }
+    
+    w.append(f_identifier(ch));
+    return w;
+}
+
+void LAnalizer::dumpData(QString fn) {
+    /*
+    * https://en.wikipedia.org/wiki/Value_change_dump
+    * The identifier is composed of one or more printable ASCII characters
+    * from ! to ~ (decimal 33 to 126)
+    * 
+    * if bus signals exist , they can be grouped (nested) in
+    * and vectored to the VCD , with bit representation
+    * 
+    *  these are conventionally kept short (i.e. one or two characters). 
+    *
+    * 
+    */
+
+    /*
+         * if is_bus ., wirelength <= buslenght , 
+         * and coding VCD will be:   'b[D{*N}] S' , 
+         * where: 
+         *    N = Number of bits., 
+         *    D = Bit value 
+         *    S = Channel symbol
+         * there is a mandory space before the channel symbol , 
+         *
+         *   **** VERIFY ****
+         *  Apparently simulide does get bus bits as absolute, 
+         *  so a remapped bus that has 8 bits starting from 8 [8..15] , 
+         *  is registered on the analyzer as 16 bit values
+         *  Since this analyzer enables supposedly any bitlength bus, 
+         *  IMHO if the channel should record the bits from 0 to buslength 
+         *  as presented to the channel to match whatever 
+         *  label was given independently of the wiring.,
+         *  
+         *  Conside the following examples: High order bit of a bus, [8..15] ,
+         *   Value  >>>  should show  <<<<    shows...
+         *   0x01        b00000001            512
+         *   0x02        b00000010            1024
+         *   0x04        b00000100            2048
+         * 
+         *   wireLength <--   m_channel  bus_width .<<<
+         *
+         */
+    QFile file(fn);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return;
     m_exportFile = fn;
 
-    QTextStream out( &file );
-    out.setLocale( QLocale::C );
+    QTextStream out(&file);
+    out.setLocale(QLocale::C);
 
-    QMultiMap<uint64_t, sample_t> samples; // collect timing data, use QMap to implicitely sort it
+    QMultiMap<uint64_t, sample_t> samples; // Recolher dados temporais, ordenados implicitamente
 
     uint64_t startTime = m_display->startTime();
-    if( (int64_t)startTime+m_timePos >= 0 ) startTime += m_timePos;
-    else                                    startTime  = 1;
+    if ((int64_t)startTime + m_timePos >= 0) startTime += m_timePos;
+    else                                      startTime  = 1;
 
-    uint64_t endTime = m_display->endTime()+m_timePos;
-    uint64_t lastTime = (endTime-startTime)/m_timeStep;
+    uint64_t endTime = m_display->endTime() + m_timePos;
+    uint64_t lastTime = (endTime - startTime) / m_timeStep;
     uint64_t pTime = 0;
-    double pVal=-1;
+    double pVal = -1;
 
     QString varDef;
     QString dumpVars = "\n$dumpvars\n";
-    uint64_t gcd = 1;  // Problems in Pulseview using gcd
+    uint64_t gcd = 1;  // Problemas no Pulseview usando gcd
 
-    for( uint ch=0; ch<8; ++ch )
-    {
-        if( !m_channel[ch]->m_connected ) continue;
+    for (uint ch = 0; ch < 8; ++ch) {
+        if (!m_channel[ch]->m_connected) continue;
 
-        QString name = m_channel[ch]->getChName();             // Get channel name
-        if( name.isEmpty() ) name = "D"+QString::number( ch ); // If name is empty set name = Dn
+        QString name = m_channel[ch]->getChName();            // Obter nome do canal
+        if (name.isEmpty()) name = "D" + QString::number(ch); // Se vazio, definir D_n
 
-        varDef += "$var wire 1 " + QString( identifiers[ch] )+" "+name+" $end\n";
-
+        
+        // ****  TODO **** 
+        // Verify generation option : gtkwave / pulseview
+        //
+        //  gtkwave wire vector, allows bitstring representation and scoping
+        //  pulsview -- each wire is an indepent signal ., no scoping
+        //
+        //  
+        // Corre‡?o: Converter m_buslength para QString para evitar falhas de concatena‡?o
+        varDef += "$var wire " + 
+            QString::number(m_channel[ch]->busLength()) + " " + 
+            QString(f_identifier(ch)) + " " + 
+            name + " $end\n";
+        
         bool init = false;
         double initVal = 0;
-        int index = m_channel[ch]->m_bufferCounter; // Start with the first sample (circular buffer)
+        int index = m_channel[ch]->m_bufferCounter; // Iniciar no primeiro exemplo (buffer circular)
 
-        for( int i=0; i<m_bufferSize; ++i )
-        {
+        for (int i = 0; i < m_bufferSize; ++i) {
             index++;
-            if( index >= m_bufferSize ) index -= m_bufferSize; // It's a circular buffer
+            if (index >= m_bufferSize) index -= m_bufferSize; // Buffer circular
 
             double   val  = m_channel[ch]->m_buffer[index];
             uint64_t time = m_channel[ch]->m_time[index];
 
-            if( pTime == time ) continue;                      // Avoid repeated times
+            if (pTime == time) continue;                     // Evitar tempos repetidos
             pTime = time;
 
-            if( time == 0 ) continue;                            // Empty samples: Simulation times start at 1 ps
-            if( time <= startTime ) { initVal = val; continue; } // Previous value from first valid sample
-            if( time > endTime ) { time = endTime; val = pVal; } // Add final value (screen edge)
-            if( !init ) {
-                dumpVars += QString::number(initVal)+identifiers[ch]+"\n"; // Add initial value
+            if (time == 0) continue;                         // Amostras vazias: Tempos come‡am em 1 ps
+            if (time <= startTime) { initVal = val; continue; } // Valor anterior do primeiro v lido
+            if (time > endTime) { time = endTime; val = pVal; } // Adicionar valor final (borda do ecr?)
+            
+            if (!init) {
+                dumpVars += encodeVCD(initVal, ch) + "\n"; // Adicionar valor inicial
                 init = true;
             }
             pVal = val;
-            time = (time-startTime)/m_timeStep;
+            time = (time - startTime) / m_timeStep;
 
-            //if( gcd > 0 ) gcd = getGcd( gcd, time ); // Get Greatest Common Denominator
-            //else          gcd = time;
-
-            samples.insert( time, { val, ch } );
-            if( time == lastTime ) break;            // All samples before endTime already registered
+            samples.insert(time, { val, ch });
+            if (time == lastTime) break;             // Todas as amostras antes de endTime registadas
         }
     }
     dumpVars += "$end\n";
-    //if( gcd < 1 ) gcd = 1; // This should not happen
 
-    out <<"$timescale "<< gcd*m_timeStep <<"ps $end"<< Qt::endl<< Qt::endl;
+    out << "$timescale " << gcd * m_timeStep << "ps $end" << Qt::endl << Qt::endl;
     out << varDef;
-    out << Qt::endl <<"$enddefinitions $end"<< Qt::endl;
+    out << Qt::endl << "$enddefinitions $end" << Qt::endl;
     out << dumpVars;
 
-    uint64_t timeStamp;
-    for( uint64_t time : samples.uniqueKeys() )
-    {
-        timeStamp = time/gcd;
-        out << Qt::endl <<"#"<< timeStamp;
-        for( sample_t sample : samples.values( time ) )
-            out <<" "<< sample.value <<identifiers[sample.channel];
+    uint64_t timeStamp = 0;
+    for (uint64_t time : samples.uniqueKeys()) {
+        timeStamp = time / gcd;
+        out << Qt::endl << "#" << timeStamp;
+        for (sample_t sample : samples.values(time))
+            out << " " << encodeVCD(sample.value, sample.channel);
     }
-    out << Qt::endl <<"#"<< timeStamp+1; // last time stamp
+    out << Qt::endl << "#" << timeStamp + 1; // éltimo carimbo de data/hora
     file.close();
 }
 
