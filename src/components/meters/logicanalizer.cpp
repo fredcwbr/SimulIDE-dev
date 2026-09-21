@@ -361,7 +361,7 @@ QString LAnalizer::encodeVCD(int64_t val, int ch ) {
     //  gtkwave wire vector, allows bitstring representation and scoping
     //  pulsview -- each wire is an indepent signal ., no scoping
     
-    // Verifica se ‚ um barramento com largura superior a 1 ou 0
+    // Verifica se eh um barramento com largura superior a 1 ou 0
     if (m_channel[ch]->isBus()) {
         w.append('b');
         for (int i = m_channel[ch]->busLength(); i > 0 ; --i) {
@@ -453,7 +453,7 @@ void LAnalizer::dumpData(QString fn) {
         //  pulsview -- each wire is an indepent signal ., no scoping
         //
         //  
-        // Corre‡?o: Converter m_buslength para QString para evitar falhas de concatena‡?o
+        // Correcao: Converter m_buslength para QString para evitar falhas de concatenacao
         varDef += "$var wire " + 
             QString::number(m_channel[ch]->busLength()) + " " + 
             QString(f_identifier(ch)) + " " + 
