@@ -367,9 +367,9 @@ QString LAnalizer::encodeVCD(int64_t val, int ch ) {
         for (int i = m_channel[ch]->busLength(); i > 0 ; --i) {
             w.append(val & (1 << (i-1)) ? '1' : '0');
         }
-        w.append(" "); // Obrigat¢rio em vetores bin rios VCD antes do identificador
+        w.append(" "); // Obrigatorio em vetores binarios VCD antes do identificador
     } else {
-        w.append(val ? '1' : '0'); // Sinal de bit £nico
+        w.append(val ? '1' : '0'); // Sinal de bit unico
     }
     
     w.append(f_identifier(ch));
@@ -473,8 +473,8 @@ void LAnalizer::dumpData(QString fn) {
             if (pTime == time) continue;                     // Evitar tempos repetidos
             pTime = time;
 
-            if (time == 0) continue;                         // Amostras vazias: Tempos come‡am em 1 ps
-            if (time <= startTime) { initVal = val; continue; } // Valor anterior do primeiro v lido
+            if (time == 0) continue;                         // Amostras vazias: Tempos comecam em 1 ps
+            if (time <= startTime) { initVal = val; continue; } // Valor anterior do primeiro valido
             if (time > endTime) { time = endTime; val = pVal; } // Adicionar valor final (borda do ecr?)
             
             if (!init) {
@@ -485,7 +485,7 @@ void LAnalizer::dumpData(QString fn) {
             time = (time - startTime) / m_timeStep;
 
             samples.insert(time, { val, ch });
-            if (time == lastTime) break;             // Todas as amostras antes de endTime registadas
+            if (time == lastTime) break;             // Todas as amostras antes de end Time registadas
         }
     }
     dumpVars += "$end\n";
@@ -502,7 +502,7 @@ void LAnalizer::dumpData(QString fn) {
         for (sample_t sample : samples.values(time))
             out << " " << encodeVCD(sample.value, sample.channel);
     }
-    out << Qt::endl << "#" << timeStamp + 1; // éltimo carimbo de data/hora
+    out << Qt::endl << "#" << timeStamp + 1; // ultimo carimbo de data/hora
     file.close();
 }
 
