@@ -439,7 +439,6 @@ void LAnalizer::dumpData(QString fn) {
     QString dumpVars = "\n$dumpvars\n";
     uint64_t gcd = 1;  // Problems in Pulseview using gcd
 
-    int bitLength[8];
     for( uint ch=0; ch<8; ++ch )
     {
         LaChannel* laChannel = static_cast<LaChannel*>( m_channel[ch] );
@@ -481,7 +480,7 @@ void LAnalizer::dumpData(QString fn) {
             if( time <= startTime ) { initVal = val; continue; } // Previous value from first valid sample
             if( time > endTime ) { time = endTime; val = pVal; } // Add final value (screen edge)
             if( !init ) {
-                dumpVars += QString::number(initVal)+identifiers[ch]+"\n"; // Add initial value
+                dumpVars += encodeVCD( initVal, ch)+"\n"; // Add initial value
                 init = true;
             }
             pVal = val;
