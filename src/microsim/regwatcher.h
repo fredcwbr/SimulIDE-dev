@@ -15,6 +15,9 @@ void watchRegister( uint16_t addr, int write
                   , DataSpace* mcu, uint8_t mask=0xFF )
 {
     //if( addr == 0 ) qDebug() << "Warning: watchRegister address 0 ";
+    if (addr == 0x22 || addr == 0x28 || addr == 0x34 || addr == 0x33 || addr == 0x21 || addr == 0x27) {
+        qDebug() << "[REGWATCHER] Register Addr:" << Qt::hex << addr << "Val:" << Qt::hex << write;
+    }
 
     if( write )
     {

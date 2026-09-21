@@ -36,7 +36,7 @@ void LaChannel::stamp()    // Called at Simulation Start
     m_analizer->conditonMet( m_channel, C_LOW );
     addReading( 0 );
 
-    m_bitLength = 1;
+    m_busLength = 1;  // one wire .. bus length 1 ... at least
     if( m_pin->isBus() )
     {
         bool connected = m_pin->connector();
@@ -45,7 +45,7 @@ void LaChannel::stamp()    // Called at Simulation Start
         for( eNode* node : m_busNodes ){
             node->voltChangedCallback( this );
             int bit = m_busNodes.key( node );
-            if( m_bitLength <= bit ) m_bitLength = bit+1;
+            if( m_busLength <= bit ) m_busLength = bit+1;
         }
     }
 }

@@ -64,6 +64,10 @@ class LAnalizer : public PlotBase
 
         void dumpData( QString fn ) override;
 
+        QString f_identifier(int ndx);
+        QString encodeVCD(int64_t val, int ch );
+ 
+
     private:
         uint64_t getGcd( uint64_t a, uint64_t b ); // greatest Common Denominator
 

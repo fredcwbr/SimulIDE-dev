@@ -63,6 +63,10 @@ uint8_t DataSpace::readReg( uint16_t addr )
 
 void DataSpace::writeReg( uint16_t addr, uint8_t v, bool masked )
 {
+
+    if (addr == 0x22 || addr == 0x28 || addr == 0x34 || addr == 0x33 || addr == 0x21 || addr == 0x27 || addr >0x21FF ) {
+         qDebug() << "[DATASPACE] writeReg invoked for Addr:" << Qt::hex << addr << "Val:" << v << "HasSignal:" << m_writeSignals.contains(addr);
+    }
     uint8_t mask = 255;
     if( masked ) // Protect Read Only bits from being written
     {

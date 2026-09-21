@@ -96,6 +96,8 @@ class PlotBase : public Component, public ScriptBase
 
         virtual void paint( QPainter* p, const QStyleOptionGraphicsItem* o, QWidget* w ) override;
 
+        
+
     protected:
         virtual void slotProperties() override;
         void updtProperties();
