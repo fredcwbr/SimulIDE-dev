@@ -5,6 +5,7 @@
 #include "avrcore.h"
 #include "e_mcu.h"
 #include "mcuport.h"
+#include "mcupin.h"
 #include "simulator.h"
 #include "e-element.h"
 #include <QDebug>
@@ -23,10 +24,10 @@ public:
         , m_sre(false)
         , m_srw0(0)
         , m_srw1(0)
-        , m_rdPin(nullptr)
-        , m_wrPin(nullptr)
-        , m_alePin(nullptr)
         , m_dataPort(nullptr)
+        , portC(nullptr)
+        , portA(nullptr)
+        , portG(nullptr)
         , m_psStep(0)
         , m_addrSetTime(0)
         , m_laEnEndTime(0)
@@ -38,15 +39,43 @@ public:
         , m_targetAddress(0)
         , m_targetData(nullptr)
         , m_isWrite(false)
-        , m_portgVal(0)
+        , m_nWaits(0)
     {
-        if (m_mcu) {
-            m_rdPin    = m_mcu->getMcuPin("PG0"); // /RD Pin
-            m_wrPin    = m_mcu->getMcuPin("PG1"); // /WR Pin
-            m_alePin   = m_mcu->getMcuPin("PG2"); // ALE Pin
-            m_dataPort = m_mcu->getMcuPort("PORTA"); // PORTA como barramento de dados/endereço baixo
+        qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] Instantiate  ph 1 |";
+        
+        if ( m_mcu ) {
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] Instantiate 2 ph m_mcu |";
+            portC = m_mcu->getMcuPort("PORTC");
+            if (portC) {
+                portC->controlPort( true, true );
+            }
+            
+            portA = m_mcu->getMcuPort("PORTA");
+            if (portA) {
+                portA->controlPort( true, true );
+                portA->setDirection( 0xFF );  // all output high address byte
+            }
+            
+            //void setDirection( uint val );       // Direct control over pins
+            //void setOutState( uint val );        // Direct control over pins
+            // uint getInpState();             // Direct control over pins
+            portG = m_mcu->getMcuPort("PORTG");
+            if (portG) {
+                portG->controlPort( true, true );
+                portG->setDirection( 0x07 );       // Permanente para toda simulacao ., ...
+            }
 
-            uint64_t basePsInst = 62500; // Fallback para 16 MHz
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] Instantiate  ph 3 m_mcu  |" << "\n"
+                    << "| m_mcu  " << m_mcu << "\n"
+                    << "| m_avrCore  " << m_avrCore << "\n"
+                    << "| portA " << Qt::hex << portA << "\n"
+                    << "| portC " << Qt::hex << portC << "\n"
+                    << "| portG " << Qt::hex << portG << "\n"
+                    ;
+          
+
+            uint64_t basePsInst = 62500; // Fallback for 16 MHz
+            _1ns = 1000;
 
             uint64_t cycleTime = basePsInst * 4; 
             m_psStep       = cycleTime / 12;
@@ -56,9 +85,9 @@ public:
             m_writeSetTime = 6 * m_psStep;
             m_readBusTime  = (cycleTime > 10) ? (cycleTime - 10) : 0;
 
-            qDebug() << "[XMEM-TIMING-INIT] AVR Core (4 clocks/inst) | BasePsInst:" << basePsInst
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-TIMING-INIT] AVR Core (4 clocks/inst) | BasePsInst:" << basePsInst
                      << "CycleTime:" << cycleTime
-                     << "psStep:" << m_psStep
+                     / 1000  << "nsStep:" << m_psStep
                      << "addrSetTime:" << m_addrSetTime
                      << "laEnEndTime:" << m_laEnEndTime
                      << "readSetTime:" << m_readSetTime
@@ -88,7 +117,7 @@ public:
     void write(uint16_t address, uint8_t value) override
     {
         if (address == 0x74 || address == 0x0074) {
-            qDebug() << "[XMEM-PROXY] XMCRA configured with:" << Qt::hex << value;
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-PROXY] XMCRA configured with:" << Qt::hex << value;
             updateXmemRegisters(0x74, value);
             if (m_ram && address < m_ramSize) m_ram[address] = value;
             return;
@@ -107,7 +136,7 @@ public:
         }
 
         if (isXmemEnabled()) {
-            qDebug() << "[XMEM-PROXY] External XMEM Write at address:" << Qt::hex << address << "Data:" << value;
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-PROXY] External XMEM Write at address:" << Qt::hex << address << "Data:" << value;
             uint8_t valToWrite = value;
             triggerBusCycle(address, valToWrite, true);
             m_externalRamSimulation[address & 0xFFFF] = value;
@@ -119,6 +148,7 @@ public:
         m_srw0 = 0;
         m_srw1 = 0;
         m_xmemState = xmem_IDLE;
+        m_nWaits = 0;
         m_externalRamSimulation.clear();
         Simulator::self()->cancelEvents(this);
 
@@ -131,7 +161,8 @@ public:
             m_writeSetTime = 6 * m_psStep;
             m_readBusTime  = cycleTime - 10;
 
-            qDebug() << "[XMEM-TIMING-RESET] CycleTime(psInst):" << cycleTime
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-TIMING-RESET] CycleTime(psInst):" << cycleTime
+                     / 1000  << "nsStep:" << m_psStep
                      << "addrSetTime:" << m_addrSetTime
                      << "readSetTime:" << m_readSetTime
                      << "writeSetTime:" << m_writeSetTime;
@@ -140,125 +171,240 @@ public:
 
     void runEvent() 
     {
-        uint64_t cycleTime = (m_mcu && m_mcu->psInst() > 0) ? (m_mcu->psInst() * 4) : 250000;
-        uint64_t psStep = cycleTime / 12;
-
+        qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] runEvent start. xmemState  " << m_xmemState;
         switch (m_xmemState)
         {
             case xmem_IDLE:
-                qDebug() << "[XMEM] State: IDLE - Aguardando novo ciclo.";
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: IDLE - Waiting for new cycle.";
                 break;
+
+            case xmem_CYCLE_START:
+            {
+                                       
+                uint8_t lowAddr = static_cast<uint8_t>(m_targetAddress & 0xFF);
+                uint8_t highAddr = static_cast<uint8_t>((m_targetAddress >> 8) & 0xFF);
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: CYCLE_START | ph 1"
+                << "| portC  " << Qt::hex << portC  
+                ;
+
+                // only portC is multiplexed.,     
+                portC->setDirection( 0xFF );       // Direct control over pins
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: CYCLE_START | ph 3"
+                << "| portA  " << Qt::hex << portA  
+                ;
+                portA->outChanged( highAddr );
+                
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: CYCLE_START | ph 4"
+                << "| portC  " << Qt::hex << portC  
+                ;
+                portC->outChanged( lowAddr);
+                                
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: CYCLE_START"
+                         << "| Addr:" << Qt::hex << m_targetAddress
+                         << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                         << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+                Simulator::self()->addEvent(_1ns, this);
+                m_xmemState = xmem_ALE_HIGH;
+            }
+            break;
 
             case xmem_ALE_HIGH:
             {
-                m_portgVal |= (1 << 2); 
-                if (m_alePin) { 
-                    m_alePin->setOutState(true); 
-                    m_alePin->updateStep(); 
-                }
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: ALE_HIGH | ph 1"
+                << "| portG  " << Qt::hex << portG  << " | portGValue: " << Qt::hex << portG->getInpState()
+                ;
+                portG->outChanged(0x07); // Set ALE high bit
+                
+                qDebug() << "[Time:" << Simulator::self()->circTime()/ 1000  << "ns] [XMEM] State: ALE_HIGH"
+                         << "| Addr:" << Qt::hex << m_targetAddress
+                         << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                         << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
 
-                uint8_t lowAddr = m_targetAddress & 0xFF;
-                if (m_dataPort) {
-                    m_dataPort->outChanged(lowAddr);
-                }
+                Simulator::self()->addEvent(_1ns, this);
+                m_xmemState = xmem_ALE_HOLD;
+            }
+            break;
 
-                qDebug() << "[XMEM] State: ALE_HIGH | Endereço Alvo:" << Qt::hex << m_targetAddress 
-                         << "| LowAddr no m_dataPort (PORTA):" << Qt::hex << lowAddr << "| ALE pin set to HIGH";
+            case xmem_ALE_HOLD:
+            {
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: ALE_HOLD"
+                         << "| Addr:" << Qt::hex << m_targetAddress
+                         << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                         << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
 
-                Simulator::self()->addEvent(4 * psStep, this);
+
+                Simulator::self()->addEvent(m_psStep, this);
                 m_xmemState = xmem_ALE_LOW;
             }
             break;
 
             case xmem_ALE_LOW:
             {
-                m_portgVal &= ~(1 << 2);
-                if (m_alePin) { 
-                    m_alePin->setOutState(false); 
-                    m_alePin->updateStep(); 
-                }
-
+                
+                portG->getPinN(2)->setOutState(0); // Set ALE high bit
+                
                 if (m_isWrite) {
-                    if (m_dataPort && m_targetData) {
-                        m_dataPort->outChanged(*m_targetData);
-                    }
-                    qDebug() << "[XMEM] State: ALE_LOW (WRITE) | Dado a escrever no m_dataPort:" << Qt::hex << *m_targetData;
-                } else {
-                    if (m_dataPort) {
-                        m_dataPort->outChanged(0xFF);
-                    }
-                    qDebug() << "[XMEM] State: ALE_LOW (READ) | m_dataPort configurado para alta impedância / pull-ups.";
-                }
+                    if (portC && m_targetData) {
+                     portC->setDirection( 0xFF );       // Direct control over pins 
+                     portC->outChanged( *m_targetData );
 
-                Simulator::self()->addEvent(2 * psStep, this);
-                m_xmemState = xmem_STROBE_ACTIVE;
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: ALE_LOW (WRITE)"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir: WRITE"
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+                    Simulator::self()->addEvent(_1ns, this);
+                    m_xmemState = xmem_STROBE_ACTIVE;
+                } else {
+
+                     portC->setDirection( 0x00 );       // Direct control over pins INPUT
+                     //void setOutState( uint val );    // Direct control over pins
+                     // portC->setOutState( 0 );        // this should not be necessary,    
+                    
+                     
+                    }
+
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: ALE_LOW (READ)"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir: READ"
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+
+                    Simulator::self()->addEvent(_1ns, this);
+                    m_xmemState = xmem_STROBE_ACTIVE;
+                }
             }
             break;
 
             case xmem_STROBE_ACTIVE:
             {
+                m_nWaits = 1;       // at least 1 ..  more on wait flags, of XMCRA
+                
                 if (m_isWrite) {
-                    if (m_wrPin) { 
-                        m_wrPin->setOutState(false); 
-                        m_wrPin->updateStep(); 
-                    }
-                    qDebug() << "[XMEM] State: STROBE_ACTIVE (WRITE) | /WR pin set to LOW";
-                } else {
-                    if (m_rdPin) { 
-                        m_rdPin->setOutState(false); 
-                        m_rdPin->updateStep(); 
-                    }
-                    qDebug() << "[XMEM] State: STROBE_ACTIVE (READ) | /RD pin set to LOW";
-                }
+                    portG->outChanged(0x02); // Set WR active low
+                    
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: STROBE_ACTIVE (WRITE)"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir: WRITE"
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
 
-                Simulator::self()->addEvent(4 * psStep, this);
-                m_xmemState = xmem_STROBE_HOLD;
+                } else {
+                    portG->outChanged(0x01); // Set RD active low
+
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: STROBE_ACTIVE (READ)"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir: READ"
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+               }
+
+               Simulator::self()->addEvent(_1ns, this);
+               m_xmemState = xmem_STROBE_WAIT;
             }
             break;
 
-            case xmem_STROBE_HOLD:
+            case xmem_STROBE_WAIT:
             {
-                if (!m_isWrite) {
-                    if (m_targetData && m_dataPort) {
-                        *m_targetData = m_dataPort->getInpState();
-                    }
-                    qDebug() << "[XMEM] State: STROBE_HOLD (READ) | Dado lido do m_dataPort:" << Qt::hex << (m_targetData ? *m_targetData : 0);
-                } else {
-                    qDebug() << "[XMEM] State: STROBE_HOLD (WRITE) | Retenção de escrita concluída.";
-                }
+                if (m_nWaits > 0) {
+                    m_nWaits--;
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  
+                             << "ns] [XMEM] State: STROBE_WAIT (Decrementing wait states, remaining:" 
+                             << m_nWaits << ")"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
 
-                Simulator::self()->addEvent(2 * psStep, this);
-                m_xmemState = xmem_STROBE_END;
+
+                    Simulator::self()->addEvent(4 * m_psStep, this);
+                    m_xmemState = xmem_STROBE_WAIT;
+                } else {
+                    qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: STROBE_WAIT (Wait states finished, moving to STROBE_END)"
+                             << "| Addr:" << Qt::hex << m_targetAddress
+                             << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                             << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+
+                    Simulator::self()->addEvent(m_psStep, this);
+                    m_xmemState = xmem_STROBE_END;
+                }
             }
             break;
 
             case xmem_STROBE_END:
             {
-                if (m_isWrite) {
-                    if (m_wrPin) { 
-                        m_wrPin->setOutState(true); 
-                        m_wrPin->updateStep(); 
-                    }
-                    qDebug() << "[XMEM] /WR pin set to HIGH";
-                } else {
-                    if (m_rdPin) { 
-                        m_rdPin->setOutState(true); 
-                        m_rdPin->updateStep(); 
-                    }
-                    qDebug() << "[XMEM] /RD pin set to HIGH";
+                if (!m_isWrite) {
+                    if (m_targetData) {
+                        *m_targetData =  portC->getInpState();             // Direct control over pins
+                    } 
                 }
 
-                qDebug() << "[XMEM] Ciclo XMEM concluído com sucesso.";
-                m_xmemState = xmem_IDLE;
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: STROBE_END"
+                         << "| Addr:" << Qt::hex << m_targetAddress
+                         << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                         << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+
+                Simulator::self()->addEvent(_1ns, this);
+                m_xmemState = xmem_STROBE_DEASSERT;
             }
             break;
 
+            case xmem_STROBE_DEASSERT:
+            {
+                portG->outChanged(0x03);
+                
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] State: STROBE_DEASSERT (Cycle Complete)"
+                         << "| Addr:" << Qt::hex << m_targetAddress
+                         << "| Dir:" << (m_isWrite ? "WRITE" : "READ")
+                         << "| DataVal:" << (m_targetData ? *m_targetData : 0)
+                         << "| ALE:" << (portG ? portG->getPinN(2)->getOutState() : 0)
+                         << "| RD:" << (portG ? portG->getPinN(1)->getOutState() : 0)
+                         << "| WR:" << (portG ? portG->getPinN(0)->getOutState() : 0);
+
+
+                Simulator::self()->addEvent( _1ns, this);
+                m_xmemState = xmem_IDLE;
+            
+                break;
+
             default:
-                qDebug() << "[XMEM] ERRO: Estado desconhecido na máquina de estados. A redefinir para IDLE.";
+                qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] ERROR: Unknown state in state machine. Resetting to IDLE.";
                 m_xmemState = xmem_IDLE;
                 break;
         }
     }
+}
 
 private:
     bool isXmemEnabled() const {
@@ -273,51 +419,40 @@ private:
             m_sre = (val & 0x80) != 0;
             m_srw0 = (val >> 2) & 0x03;
             m_srw1 = val & 0x03;
-            qDebug() << "[XMEM-REG] XMCRA: SRE=" << m_sre << "SRW0=" << m_srw0 << "SRW1=" << m_srw1;
+            qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-REG] XMCRA: SRE=" << m_sre << "SRW0=" << m_srw0 << "SRW1=" << m_srw1;
         }
     }
 
     void triggerBusCycle(uint16_t address, uint8_t& data, bool isWrite) {
-        uint8_t lowAddr = static_cast<uint8_t>(address & 0xFF);
-        uint8_t highAddr = static_cast<uint8_t>((address >> 8) & 0xFF);
-
         if (!m_mcu || !m_avrCore) return;
 
-        qDebug() << "[XMEM-DEBUG] Entering Bus Cycle for Addr:" << Qt::hex << address
-                 << "PORTG reg val:" << (m_ram ? m_ram[0x34] : 0)
-                 << "PG0(/RD) connected:" << (m_rdPin ? m_rdPin->isConnected() : false)
-                 << "PG1(/WR) connected:" << (m_wrPin ? m_wrPin->isConnected() : false)
-                 << "PG2(ALE) connected:" << (m_alePin ? m_alePin->isConnected() : false);
+        qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM] trigger entry  |" << "\n"
+                    << "| m_mcu  " << m_mcu << "\n"
+                    << "| m_avrCore  " << m_avrCore << "\n"
+                    << "| portA " << Qt::hex << portA << "\n"
+                    << "| portC " << Qt::hex << portC << "\n"
+                    ;
+            
+        qDebug() << "[Time:" << Simulator::self()->circTime() / 1000  << "ns] [XMEM-DEBUG] Triggering Bus Cycle for Addr:" << Qt::hex << address;
 
         m_targetAddress = address;
         m_targetData = &data;
         m_isWrite = isWrite;
 
-        m_avrCore->writePortReg(0x27, 0xFF); // DDRC out
-        m_avrCore->writePortReg(0x21, isWrite ? 0xFF : 0x00); // DDRA out/in
-
-        uint8_t ddrg = m_ram ? m_ram[0x33] : 0;
-        ddrg |= (1 << 0) | (1 << 1) | (1 << 2);
-        m_avrCore->writePortReg(0x33, ddrg);
-
-        m_avrCore->writePortReg(0x28, highAddr);
-        m_avrCore->writePortReg(0x22, lowAddr); 
-
-        m_portgVal = m_ram ? m_ram[0x34] : 0;
-        m_portgVal |= (1 << 0) | (1 << 1);
-        m_portgVal &= ~(1 << 2);
-
-        m_xmemState = xmem_ALE_HIGH;
+        m_xmemState = xmem_CYCLE_START;
         Simulator::self()->addEvent(1, this);
     }
 
     enum xmemState_t {
         xmem_IDLE = 0,
+        xmem_CYCLE_START,
         xmem_ALE_HIGH,
+        xmem_ALE_HOLD,
         xmem_ALE_LOW,
         xmem_STROBE_ACTIVE,
-        xmem_STROBE_HOLD,
-        xmem_STROBE_END
+        xmem_STROBE_WAIT,
+        xmem_STROBE_END,
+        xmem_STROBE_DEASSERT
     };
 
     AvrCore* m_avrCore;
@@ -330,10 +465,10 @@ private:
     uint8_t m_srw0;
     uint8_t m_srw1;
 
-    McuPin*  m_rdPin;
-    McuPin*  m_wrPin;
-    McuPin*  m_alePin;
-    McuPort* m_dataPort; // Adicionado para controlo direto do porto de dados
+    McuPort* m_dataPort;
+    McuPort* portC;
+    McuPort* portA;
+    McuPort* portG;
 
     uint64_t m_psStep;
     uint64_t m_addrSetTime;
@@ -342,12 +477,13 @@ private:
     uint64_t m_writeSetTime;
     uint64_t m_readBusTime;
     uint64_t m_dataTime;
+    uint64_t _1ns;
 
     xmemState_t m_xmemState;
     uint16_t m_targetAddress;
     uint8_t* m_targetData;
     bool m_isWrite;
-    uint8_t m_portgVal;
+    int m_nWaits;
 
     QHash<uint16_t, uint8_t> m_externalRamSimulation;
 };

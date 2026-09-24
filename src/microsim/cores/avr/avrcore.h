@@ -56,6 +56,13 @@ public:
             return;
         }
 
+        // Catch port writes (PORTA, PORTC, PORTG) and trigger their outChanged callbacks
+        if ( addr == 0x22 || addr == 0x28 || addr == 0x34 || 
+             addr == 0x0022 || addr == 0x0028 || addr == 0x0034 ) {
+            writePortReg( addr, val );
+            return;
+        }
+
         Mcu8bits::SET_RAM( addr, val );
     }
 
